@@ -214,7 +214,7 @@ export default function Home() {
         </div>
 
         <div className="rail-brand">
-          <div className="brand-glyph"><Sparkles size={17} /></div>
+          <div className="brand-glyph"><img src="/logo.png" alt="Constella Logo" style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "4px" }} /></div>
           <strong>Constella</strong><ChevronDown size={15} />
           <button className="rail-search" aria-label="Search" onClick={() => setSearchOpen(true)}><Search size={17} /></button>
         </div>
@@ -308,7 +308,7 @@ export default function Home() {
             {!active && (
               <>
                 <div className="welcome">
-                  <div className="welcome-mark"><WandSparkles size={25} /></div>
+                  <div className="welcome-mark"><img src="/logo.png" alt="Constella Logo" style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "12px" }} /></div>
                   <h1>{welcome}</h1>
                   <p>Constella quietly assembles the right team for the work.</p>
                 </div>
