@@ -204,8 +204,46 @@ export default function Home() {
   /* ══════════════════════════════════════════════════════════
      RENDER
      ══════════════════════════════════════════════════════════ */
+  const [showIntro, setShowIntro] = useState(true);
+  const [introStage, setIntroStage] = useState(0); // 0=enter, 1=widescreen+wave, 2=logo+text, 3=finish
+
+  // Sequence intro animation
+  const handleEnter = () => {
+    setIntroStage(1);
+    const audio = document.getElementById("intro-audio") as HTMLAudioElement;
+    if (audio) { audio.volume = 0.5; audio.play().catch(e => console.log("Audio play failed", e)); }
+    
+    setTimeout(() => setIntroStage(2), 1500);
+    setTimeout(() => setIntroStage(3), 5000); // Trigger zoom finish
+    setTimeout(() => {
+      setShowIntro(false);
+    }, 6500); // Intro lasts 6.5s total
+  };
+
   return (
-    <main className="constella-app">
+    <>
+      {showIntro && (
+        <div className={`intro-container ${introStage >= 1 ? "open" : ""} ${introStage >= 3 ? "zoom-finish" : ""}`}>
+          <div className="intro-widescreen-top" />
+          <div className="intro-widescreen-bottom" />
+          <div className={`intro-wave ${introStage >= 1 ? "visible" : ""}`} />
+          
+          <div className="intro-content">
+            <img src="/logo.png" alt="Logo" className={`intro-logo ${introStage >= 2 ? "visible" : ""}`} />
+            <div className={`intro-text ${introStage >= 2 ? "visible" : ""}`}>
+              <h1>Constella</h1>
+              <p>One intelligence, every model.</p>
+            </div>
+            
+            {introStage === 0 && (
+              <button className="enter-btn visible" onClick={handleEnter}>Enter Workspace</button>
+            )}
+          </div>
+          <audio id="intro-audio" src="/lofi.mp3" loop />
+        </div>
+      )}
+
+      <div className="constella-app">
       {/* ── SIDEBAR ─────────────────────────────────────── */}
       <aside className={`side-rail ${sideOpen ? "" : "collapsed"}`}>
         <div className="window-row">
@@ -469,7 +507,8 @@ export default function Home() {
           </section>
         </div>
       )}
-    </main>
+      </div>
+    </>
   );
 }
 
