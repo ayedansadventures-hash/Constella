@@ -74,7 +74,7 @@ export default function Home() {
   const [activeModel, setActiveModel] = useState<(typeof MODELS)[number] | null>(null);
   const [roleStage, setRoleStage] = useState<"task" | "authority">("task");
   const [chosenTask, setChosenTask] = useState("");
-  const [weights, setWeights] = useState<Record<string, number>>({ deepseek: 26, codex: 32, gemini: 20, claude: 22 });
+  const [weights, setWeights] = useState<Record<string, number>>({ deepseek: 25, codex: 25, gemini: 25, claude: 25 });
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQ, setSearchQ] = useState("");
   const [view, setView] = useState<SideView>("chat");
@@ -432,9 +432,21 @@ export default function Home() {
             <>
               <button className="back-step" onClick={() => setRoleStage("task")}><ArrowLeft size={14} />{chosenTask}</button>
               <p>How much authority should it have?</p>
-              <div className="authority-options">
-                <button onClick={() => adjustModel("more")}><Gauge size={18} /><span><strong>Put more in charge</strong><small>{activeModel.name} leads; the other models advise and check.</small></span></button>
-                <button onClick={() => adjustModel("less")}><Bot size={18} /><span><strong>Put less in charge</strong><small>{activeModel.name} assists while Constella picks another lead.</small></span></button>
+              <div className="authority-options" style={{ padding: "10px 0" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "12px", fontSize: "13px", color: "#ccc" }}>
+                  <span>0%</span>
+                  <strong style={{ color: "#fff", fontSize: "15px" }}>{weights[activeModel.id]}%</strong>
+                  <span>100%</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="0" 
+                  max="100" 
+                  value={weights[activeModel.id]} 
+                  onChange={e => setWeights(w => ({ ...w, [activeModel.id]: Number(e.target.value) }))} 
+                  style={{ width: "100%", accentColor: "#8d86ff", marginBottom: "16px" }} 
+                />
+                <button style={{ width: "100%", background: "#fff", color: "#000", padding: "10px", borderRadius: "8px", justifyContent: "center", fontWeight: "600" }} onClick={() => { setActiveModel(null); setRoleStage("task"); }}>Apply</button>
               </div>
             </>
           )}
