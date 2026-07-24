@@ -442,7 +442,7 @@ export default function Home() {
                   min="0" 
                   max="100" 
                   value={weights[activeModel.id]} 
-                  onChange={e => setWeights(w => ({ ...w, [activeModel.id]: Number(e.target.value) }))} 
+                  onChange={e => setWeights(w => ({ ...w, [activeModel!.id]: Number(e.target.value) }))} 
                   style={{ width: "100%", accentColor: "#8d86ff", marginBottom: "16px" }} 
                 />
                 <button style={{ width: "100%", background: "#fff", color: "#000", padding: "10px", borderRadius: "8px", justifyContent: "center", fontWeight: "600" }} onClick={() => { setActiveModel(null); setRoleStage("task"); }}>Apply</button>
