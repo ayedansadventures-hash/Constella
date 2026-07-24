@@ -209,7 +209,6 @@ export default function Home() {
       {/* ── SIDEBAR ─────────────────────────────────────── */}
       <aside className={`side-rail ${sideOpen ? "" : "collapsed"}`}>
         <div className="window-row">
-          <i className="dot red" /><i className="dot yellow" /><i className="dot green" />
           <button aria-label="Toggle sidebar" onClick={() => setSideOpen(o => !o)}><Menu size={15} /></button>
         </div>
 
