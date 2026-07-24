@@ -29,10 +29,10 @@ const CHIPS = [
 ];
 
 const MODELS = [
-  { id: "deepseek", name: "DeepSeek", version: "V4 Pro", color: "#5aa7ff", icon: "D", best: "Reasoning lead", summary: "Architecture, mathematics, logic, planning", tasks: ["Deep reasoning", "System architecture", "Math & logic", "Plan a complex task"] },
-  { id: "codex", name: "Codex", version: "GPT-5.3", color: "#f3f3f3", icon: "C", best: "Engineering lead", summary: "Build, debug, review, ship", tasks: ["Write code", "Debug a problem", "Review a codebase", "Build a feature"] },
-  { id: "gemini", name: "Gemini", version: "3.1 Pro", color: "#b38cff", icon: "G", best: "Multimodal lead", summary: "Research, images, video, long context", tasks: ["Generate an image", "Research the web", "Analyze media", "Explore a large document"] },
-  { id: "claude", name: "Claude", version: "Sonnet 5", color: "#e99666", icon: "A", best: "Synthesis lead", summary: "Writing, analysis, nuanced communication", tasks: ["Write & refine", "Synthesize research", "Analyze a document", "Explain with clarity"] },
+  { id: "deepseek", name: "DeepSeek", summary: "Reasoning lead", best: "Logic", color: "#4d6bfe", icon: "D" },
+  { id: "kimi", name: "Kimi", summary: "Context lead", best: "Reading", color: "#F03A2E", icon: "K" },
+  { id: "gemini", name: "Gemini", summary: "Multimodal lead", best: "Vision", color: "#ab68ff", icon: "G" },
+  { id: "claude", name: "Claude", summary: "Synthesis lead", best: "Writing", color: "#d97757", icon: "A" }
 ];
 
 const SETTINGS_GROUPS = [
@@ -58,7 +58,7 @@ export default function Home() {
   const [typing, setTyping] = useState(false);
 
   /* ── usage ── */
-  const [usage, setUsage] = useState(USAGE_MAX);
+  const [usage, setUsage] = useState(0);
   const [refreshAt, setRefreshAt] = useState(Date.now());
   const [timeLeft, setTimeLeft] = useState(REFRESH_MS);
 
@@ -74,11 +74,12 @@ export default function Home() {
   const [activeModel, setActiveModel] = useState<(typeof MODELS)[number] | null>(null);
   const [roleStage, setRoleStage] = useState<"task" | "authority">("task");
   const [chosenTask, setChosenTask] = useState("");
-  const [weights, setWeights] = useState<Record<string, number>>({ deepseek: 25, codex: 25, gemini: 25, claude: 25 });
+  const [weights, setWeights] = useState<Record<string, number>>({ deepseek: 0, kimi: 0, gemini: 100, claude: 0 });
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQ, setSearchQ] = useState("");
   const [view, setView] = useState<SideView>("chat");
   const [sideOpen, setSideOpen] = useState(true);
+  const [showModelsInChat, setShowModelsInChat] = useState(false);
   const [hovered, setHovered] = useState<string | null>(null);
 
   /* ── API connections ── */
@@ -342,7 +343,7 @@ export default function Home() {
         {view === "chat" && (
           <div className="chat-stage">
             {/* empty / welcome */}
-            {!active && (
+            {(!active || showModelsInChat) && (
               <>
                 <div className="welcome">
                   <div className="welcome-mark"><img src="/logo.png" alt="Constella Logo" style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "12px" }} /></div>
@@ -373,6 +374,14 @@ export default function Home() {
             {/* messages */}
             {active && (
               <div className="messages-scroll">
+                <div style={{ textAlign: "center", margin: "20px 0" }}>
+                  <button 
+                    onClick={() => setShowModelsInChat(!showModelsInChat)}
+                    style={{ background: "#333", color: "white", border: "none", padding: "6px 12px", borderRadius: "12px", cursor: "pointer", fontSize: "12px" }}
+                  >
+                    {showModelsInChat ? "Hide Models" : "Show Models & Weights"}
+                  </button>
+                </div>
                 {active.msgs.filter(m => m.role !== "system").map((m, i) => (
                   <div key={i} className={`msg ${m.role}`}>
                     {m.role === "assistant" && <div className="msg-avatar"><Sparkles size={14} /></div>}
@@ -712,7 +721,7 @@ function renderSettings(section: string, weights: Record<string, number>, setWei
           <p>DeepSeek, Codex, Gemini, and Claude work inside Constella as one coordinated system. You never switch apps.</p>
           {MODELS.map(model => (
             <div className="model-setting" key={model.id}>
-              <i style={{ background: model.color, color: model.id === "codex" ? "#171717" : "white" }}>{model.icon}</i>
+              <i style={{ background: model.color, color: "white" }}>{model.icon}</i>
               <div><strong>{model.name}<em>{model.best}</em></strong><span>{model.summary}</span></div>
               <Check size={16} />
             </div>
