@@ -4,14 +4,13 @@ import handler from "vinext/server/app-router-entry";
 
 interface Env {
   ASSETS: Fetcher;
-  DB: D1Database;
-  IMAGES: {
-    input(stream: ReadableStream): {
-      transform(options: Record<string, unknown>): {
-        output(options: { format: string; quality: number }): Promise<{ response(): Response }>;
-      };
-    };
-  };
+  DB: any;
+  IMAGES: any;
+  // API Keys from Cloudflare Secrets
+  OPENAI_API_KEY?: string;
+  DEEPSEEK_API_KEY?: string;
+  ANTHROPIC_API_KEY?: string;
+  GEMINI_API_KEY?: string;
 }
 
 interface ExecutionContext {
@@ -19,15 +18,90 @@ interface ExecutionContext {
   passThroughOnException(): void;
 }
 
-// Image security config. SVG sources with .svg extension auto-skip the
-// optimization endpoint on the client side (served directly, no proxy).
-// To route SVGs through the optimizer (with security headers), set
-// dangerouslyAllowSVG: true in next.config.js and uncomment below:
-// const imageConfig: ImageConfig = { dangerouslyAllowSVG: true };
+/* ── Custom Proxy Logic for Real AI APIs ── */
+async function handleChat(request: Request, env: Env): Promise<Response> {
+  try {
+    const { model, messages } = await request.json() as any;
+    
+    if (model === "openai" || model === "codex") {
+      if (!env.OPENAI_API_KEY) return new Response(JSON.stringify({ error: "Missing OPENAI_API_KEY in Cloudflare Settings" }), { status: 400 });
+      const apiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${env.OPENAI_API_KEY}` },
+        body: JSON.stringify({ model: "gpt-3.5-turbo", messages }) // Fallback to 3.5 turbo if codex is deprecated
+      });
+      const data: any = await apiRes.json();
+      return new Response(JSON.stringify({ content: data.choices?.[0]?.message?.content || data.error?.message || "Error" }), { headers: { "Content-Type": "application/json" } });
+    }
+    
+    if (model === "deepseek") {
+      if (!env.DEEPSEEK_API_KEY) return new Response(JSON.stringify({ error: "Missing DEEPSEEK_API_KEY in Cloudflare Settings" }), { status: 400 });
+      const apiRes = await fetch("https://api.deepseek.com/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${env.DEEPSEEK_API_KEY}` },
+        body: JSON.stringify({ model: "deepseek-chat", messages })
+      });
+      const data: any = await apiRes.json();
+      return new Response(JSON.stringify({ content: data.choices?.[0]?.message?.content || data.error?.message || "Error" }), { headers: { "Content-Type": "application/json" } });
+    }
+    
+    if (model === "claude") {
+      if (!env.ANTHROPIC_API_KEY) return new Response(JSON.stringify({ error: "Missing ANTHROPIC_API_KEY in Cloudflare Settings" }), { status: 400 });
+      const sysMsg = messages.find((m: any) => m.role === "system")?.content || "";
+      const otherMsgs = messages.filter((m: any) => m.role !== "system");
+      
+      const apiRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+        body: JSON.stringify({ model: "claude-3-haiku-20240307", max_tokens: 1024, system: sysMsg, messages: otherMsgs })
+      });
+      const data: any = await apiRes.json();
+      return new Response(JSON.stringify({ content: data.content?.[0]?.text || data.error?.message || "Error" }), { headers: { "Content-Type": "application/json" } });
+    }
+    
+    if (model === "gemini") {
+      if (!env.GEMINI_API_KEY) return new Response(JSON.stringify({ error: "Missing GEMINI_API_KEY in Cloudflare Settings" }), { status: 400 });
+      const sysMsg = messages.find((m: any) => m.role === "system")?.content || "";
+      const otherMsgs = messages.filter((m: any) => m.role !== "system").map((m: any) => ({
+        role: m.role === "assistant" ? "model" : m.role,
+        parts: [{ text: m.content }]
+      }));
+      
+      const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${env.GEMINI_API_KEY}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: sysMsg }] },
+          contents: otherMsgs
+        })
+      });
+      const data: any = await apiRes.json();
+      return new Response(JSON.stringify({ content: data.candidates?.[0]?.content?.parts?.[0]?.text || data.error?.message || "Error" }), { headers: { "Content-Type": "application/json" } });
+    }
+    
+    return new Response(JSON.stringify({ error: "Unknown model" }), { status: 400 });
+  } catch (err: any) {
+    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+  }
+}
 
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+
+    // AI API Route endpoints
+    if (request.method === "POST" && url.pathname === "/api/chat") {
+      return handleChat(request, env);
+    }
+    if (request.method === "GET" && url.pathname === "/api/chat/status") {
+      const connections = {
+        openai: !!env.OPENAI_API_KEY,
+        deepseek: !!env.DEEPSEEK_API_KEY,
+        claude: !!env.ANTHROPIC_API_KEY,
+        gemini: !!env.GEMINI_API_KEY
+      };
+      return new Response(JSON.stringify(connections), { headers: { "Content-Type": "application/json" } });
+    }
 
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
