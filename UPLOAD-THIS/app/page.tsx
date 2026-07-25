@@ -46,7 +46,7 @@ const REFRESH_MS = 3_600_000; // 1 hour
 /* ── helpers ───────────────────────────────────────────── */
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 function titleFrom(s: string) { const c = s.trim().replace(/\n/g, " "); return c.length <= 40 ? c : c.slice(0, 37) + "…"; }
-function usageCost(msg: string) { const n = msg.trim().length; if (n < 50) return 2; if (n <= 150) return 5; return 10; }
+function usageCost(msg: string) { const n = msg.trim().length; if (n < 50) return 0; if (n <= 200) return 1; return 3; }
 
 /* ══════════════════════════════════════════════════════════
    MAIN COMPONENT
@@ -58,7 +58,7 @@ export default function Home() {
   const [typing, setTyping] = useState(false);
 
   /* ── usage ── */
-  const [usage, setUsage] = useState(0);
+  const [usage, setUsage] = useState(USAGE_MAX);
   const [refreshAt, setRefreshAt] = useState(Date.now());
   const [timeLeft, setTimeLeft] = useState(REFRESH_MS);
 
