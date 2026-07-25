@@ -68,6 +68,8 @@ export default function Home() {
   const [selectedVoice, setSelectedVoice] = useState<string | null>(null);
   const [voiceMenuOpen, setVoiceMenuOpen] = useState(false);
   const [ultraMode, setUltraMode] = useState(false);
+  const [activeArtifact, setActiveArtifact] = useState<{code: string; language: string} | null>(null);
+  const [consoleOutput, setConsoleOutput] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -162,6 +164,26 @@ export default function Home() {
   }
 
   /* ── actions ── */
+  const runCode = () => {
+    if (!activeArtifact || activeArtifact.language.toLowerCase() !== "javascript") return;
+    setConsoleOutput([]);
+    const originalLog = console.log;
+    const logs: string[] = [];
+    console.log = (...args) => {
+      logs.push(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(" "));
+      originalLog(...args);
+    };
+    try {
+      const fn = new Function(activeArtifact.code);
+      fn();
+      if (logs.length === 0) logs.push("Code executed successfully with no output.");
+    } catch (err: any) {
+      logs.push(`Error: ${err.message}`);
+    }
+    console.log = originalLog;
+    setConsoleOutput(logs);
+  };
+
   async function send(custom?: string) {
     const txt = (custom ?? message).trim();
     if (!txt || usage <= 0 || typing) return;
@@ -386,106 +408,162 @@ export default function Home() {
 
         {/* ── CHAT STAGE ── */}
         {view === "chat" && (
-          <div className="chat-stage">
-            <div className="messages-scroll">
-              {/* empty / welcome */}
-              {(!active || showModelsInChat) && (
-                <div style={{ paddingBottom: "40px" }}>
-                  <div className="welcome">
-                    <div className="welcome-mark"><img src="/logo.png" alt="Constella Logo" style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "12px", mixBlendMode: "screen", filter: "invert(1)" }} /></div>
-                    <h1>{welcome}</h1>
-                    <p>Constella quietly assembles the right team for the work.</p>
-                  </div>
-
-                  <div className="chip-row">
-                    {CHIPS.map(c => (
-                      <button key={c.label} className="chip" onClick={() => { setMessage(c.label); }}>
-                        <span className="chip-emoji">{c.emoji}</span>{c.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="team-strip" aria-label="Constella model team">
-                    <div className="team-label"><Sparkles size={14} /><span><strong>Constella team</strong><small>Working as one intelligence</small></span></div>
-                    {MODELS.map(m => (
-                      <button key={m.id} onClick={() => { setActiveModel(m); setRoleStage("task"); }}>
-                        <i style={{ background: m.color, color: m.id === "codex" ? "#171717" : "#fff" }}>{m.icon}</i>
-                        <span><strong>{m.name}</strong><small>{m.best}</small></span><b>{weights[m.id]}%</b>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* messages */}
-              {active && (
-                <>
-                  <div style={{ textAlign: "center", margin: "20px 0" }}>
-                    <button 
-                      onClick={() => setShowModelsInChat(!showModelsInChat)}
-                      style={{ background: "#333", color: "white", border: "none", padding: "6px 12px", borderRadius: "12px", cursor: "pointer", fontSize: "12px" }}
-                    >
-                      {showModelsInChat ? "Hide Models" : "Show Models & Weights"}
-                    </button>
-                  </div>
-                  {active.msgs.filter(m => m.role !== "system").map((m, i) => (
-                    <div key={i} className={`msg ${m.role}`}>
-                      {m.role === "assistant" && <div className="msg-avatar"><Sparkles size={14} /></div>}
-                      <div className="msg-bubble">
-                        {m.content.split("\n").map((line, j) => {
-                          const isImg = line.match(/^!\[(.*?)\]\((.*?)\)$/);
-                          if (isImg) return <img key={j} src={isImg[2]} alt={isImg[1]} style={{maxWidth: "100%", borderRadius: "8px", marginTop: "8px"}} />;
-                          return <p key={j}>{line || "\u00A0"}</p>;
-                        })}
-                      </div>
+          <div style={{ display: "flex", flex: 1, minHeight: 0, width: "100%" }}>
+            <div className="chat-stage" style={{ flex: activeArtifact ? "0 0 50%" : 1, transition: "flex 0.3s ease", borderRight: activeArtifact ? "1px solid #333" : "none" }}>
+              <div className="messages-scroll">
+                {/* empty / welcome */}
+                {(!active || showModelsInChat) && (
+                  <div style={{ paddingBottom: "40px" }}>
+                    <div className="welcome">
+                      <div className="welcome-mark"><img src="/logo.png" alt="Constella Logo" style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "12px", mixBlendMode: "screen", filter: "invert(1)" }} /></div>
+                      <h1>{welcome}</h1>
+                      <p>Constella quietly assembles the right team for the work.</p>
                     </div>
-                  ))}
-                  {typing && (
-                    <div className="msg assistant">
-                      <div className="msg-avatar"><Sparkles size={14} /></div>
-                      <div className="msg-bubble typing-indicator">
-                        <span /><span /><span />
-                      </div>
-                    </div>
-                  )}
-                  <div ref={endRef} />
-                </>
-              )}
-            </div>
 
-            {/* composer */}
-            <div className="composer-zone">
-              {usage <= 0 && <div className="usage-depleted"><Zap size={15} />Usage depleted. Refreshes in {fmtTime(timeLeft)}.</div>}
-              <div className="composer-box">
-                <textarea
-                  value={message}
-                  onChange={e => setMessage(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-                  placeholder={usage > 0 ? "Do anything" : "Waiting for usage refresh…"}
-                  disabled={usage <= 0}
-                  aria-label="Message Constella"
-                />
-                <div className="composer-actions">
-                  <div className="attach-anchor">
-                    <button onClick={() => setAttachOpen(!attachOpen)} aria-label="Add files"><Plus size={20} /></button>
-                    {attachOpen && (
-                      <div className="attach-pop">
-                        <button onClick={() => fileRef.current?.click()}><Paperclip size={16} />Files</button>
-                        <button onClick={() => fileRef.current?.click()}><Folder size={16} />Folder</button>
-                        <button><ImageIcon size={16} />Image</button>
+                    <div className="chip-row">
+                      {CHIPS.map(c => (
+                        <button key={c.label} className="chip" onClick={() => { setMessage(c.label); }}>
+                          <span className="chip-emoji">{c.emoji}</span>{c.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="team-strip" aria-label="Constella model team">
+                      <div className="team-label"><Sparkles size={14} /><span><strong>Constella team</strong><small>Working as one intelligence</small></span></div>
+                      {MODELS.map(m => (
+                        <button key={m.id} onClick={() => { setActiveModel(m); setRoleStage("task"); }}>
+                          <i style={{ background: m.color, color: m.id === "codex" ? "#171717" : "#fff" }}>{m.icon}</i>
+                          <span><strong>{m.name}</strong><small>{m.best}</small></span><b>{weights[m.id]}%</b>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* messages */}
+                {active && (
+                  <>
+                    <div style={{ textAlign: "center", margin: "20px 0" }}>
+                      <button 
+                        onClick={() => setShowModelsInChat(!showModelsInChat)}
+                        style={{ background: "#333", color: "white", border: "none", padding: "6px 12px", borderRadius: "12px", cursor: "pointer", fontSize: "12px" }}
+                      >
+                        {showModelsInChat ? "Hide Models" : "Show Models & Weights"}
+                      </button>
+                    </div>
+                    {active.msgs.filter(m => m.role !== "system").map((m, i) => (
+                      <div key={i} className={`msg ${m.role}`}>
+                        {m.role === "assistant" && <div className="msg-avatar"><Sparkles size={14} /></div>}
+                        <div className="msg-bubble">
+                          {(() => {
+                            const parts = m.content.split(/(```[\s\S]*?```)/g);
+                            return parts.map((part, i) => {
+                              if (part.startsWith("```") && part.endsWith("```")) {
+                                const match = part.match(/```(\w*)\n([\s\S]*?)```/);
+                                if (match) {
+                                  const lang = match[1] || "text";
+                                  const code = match[2];
+                                  return (
+                                    <div key={i} style={{ margin: "12px 0", background: "#111", border: "1px solid #333", borderRadius: "8px", overflow: "hidden" }}>
+                                      <div style={{ display: "flex", justifyContent: "space-between", background: "#222", padding: "8px 12px", fontSize: "12px", color: "#888" }}>
+                                        <span>{lang}</span>
+                                        <button onClick={() => setActiveArtifact({ code, language: lang })} style={{ color: "#ab68ff", fontWeight: 600 }}>Open in Canvas <ChevronRight size={12} style={{verticalAlign:"middle", marginBottom:"2px"}}/></button>
+                                      </div>
+                                      <pre style={{ padding: "12px", margin: 0, fontSize: "13px", overflowX: "auto" }}><code>{code}</code></pre>
+                                    </div>
+                                  );
+                                }
+                              }
+                              return <div key={i}>{part.split("\n").map((line, j) => {
+                                const isImg = line.match(/^!\[(.*?)\]\((.*?)\)$/);
+                                if (isImg) return <img key={j} src={isImg[2]} alt={isImg[1]} style={{maxWidth: "100%", borderRadius: "8px", marginTop: "8px"}} />;
+                                return <p key={j}>{line || "\u00A0"}</p>;
+                              })}</div>;
+                            });
+                          })()}
+                        </div>
+                      </div>
+                    ))}
+                    {typing && (
+                      <div className="msg assistant">
+                        <div className="msg-avatar"><Sparkles size={14} /></div>
+                        <div className="msg-bubble typing-indicator">
+                          <span /><span /><span />
+                        </div>
                       </div>
                     )}
-                  </div>
-                  <input hidden multiple type="file" ref={fileRef} />
-                  <button className={plan ? "plan-active" : ""} onClick={() => setPlan(!plan)}><FileCode2 size={16} />{plan ? "Plan on" : "Plan off"}</button>
-                  <div className="composer-spacer" />
-                  <div className="unity-pill"><Sparkles size={14} /><span>Constella Auto</span><ChevronDown size={14} /></div>
-                  <button aria-label="Dictate"><Mic size={18} /></button>
-                  <button className="send" disabled={!message.trim() || usage <= 0} onClick={() => send()}><ArrowUp size={18} /></button>
-                </div>
+                    <div ref={endRef} />
+                  </>
+                )}
               </div>
-              <p className="composer-note">One account. One conversation. Every model contributes behind the scenes. <span className="usage-inline">Usage: {usage}/{USAGE_MAX}</span></p>
+
+              {/* composer */}
+              <div className="composer-zone">
+                {usage <= 0 && <div className="usage-depleted"><Zap size={15} />Usage depleted. Refreshes in {fmtTime(timeLeft)}.</div>}
+                <div className="composer-box">
+                  <textarea
+                    value={message}
+                    onChange={e => setMessage(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+                    placeholder={usage > 0 ? "Do anything" : "Waiting for usage refresh…"}
+                    disabled={usage <= 0}
+                    aria-label="Message Constella"
+                  />
+                  <div className="composer-actions">
+                    <div className="attach-anchor">
+                      <button onClick={() => setAttachOpen(!attachOpen)} aria-label="Add files"><Plus size={20} /></button>
+                      {attachOpen && (
+                        <div className="attach-pop">
+                          <button onClick={() => fileRef.current?.click()}><Paperclip size={16} />Files</button>
+                          <button onClick={() => fileRef.current?.click()}><Folder size={16} />Folder</button>
+                          <button><ImageIcon size={16} />Image</button>
+                        </div>
+                      )}
+                    </div>
+                    <input hidden multiple type="file" ref={fileRef} />
+                    <button className={plan ? "plan-active" : ""} onClick={() => setPlan(!plan)}><FileCode2 size={16} />{plan ? "Plan on" : "Plan off"}</button>
+                    <div className="composer-spacer" />
+                    <div className="unity-pill"><Sparkles size={14} /><span>Constella Auto</span><ChevronDown size={14} /></div>
+                    <button aria-label="Dictate"><Mic size={18} /></button>
+                    <button className="send" disabled={!message.trim() || usage <= 0} onClick={() => send()}><ArrowUp size={18} /></button>
+                  </div>
+                </div>
+                <p className="composer-note">One account. One conversation. Every model contributes behind the scenes. <span className="usage-inline">Usage: {usage}/{USAGE_MAX}</span></p>
+              </div>
             </div>
+
+            {/* ── CANVAS STAGE ── */}
+            {activeArtifact && (
+              <div className="canvas-stage" style={{ flex: "1", display: "flex", flexDirection: "column", background: "#0a0a0a", overflow: "hidden" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#111", padding: "12px 16px", borderBottom: "1px solid #333" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <Laptop size={16} color="#ab68ff" />
+                    <strong style={{ fontSize: "14px", color: "#fff" }}>Interactive Canvas</strong>
+                    <span style={{ fontSize: "12px", color: "#888", background: "#222", padding: "2px 6px", borderRadius: "4px", textTransform: "uppercase" }}>{activeArtifact.language}</span>
+                  </div>
+                  <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                    {activeArtifact.language.toLowerCase() === "javascript" || activeArtifact.language.toLowerCase() === "js" ? (
+                      <button onClick={runCode} style={{ display: "flex", alignItems: "center", gap: "6px", background: "#ab68ff", color: "#fff", border: "none", padding: "6px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: "bold", cursor: "pointer" }}><Zap size={14}/> Run Code</button>
+                    ) : null}
+                    <button onClick={() => setActiveArtifact(null)} style={{ color: "#888", background: "none", border: "none", cursor: "pointer", padding: "4px" }}><X size={18} /></button>
+                  </div>
+                </div>
+                <div style={{ flex: 1, overflowY: "auto", padding: "16px", background: "#000" }}>
+                  <pre style={{ margin: 0, fontSize: "14px", color: "#ccc", fontFamily: "monospace", whiteSpace: "pre-wrap", wordBreak: "break-all" }}><code>{activeArtifact.code}</code></pre>
+                </div>
+                {(activeArtifact.language.toLowerCase() === "javascript" || activeArtifact.language.toLowerCase() === "js") && (
+                  <div style={{ height: "35%", background: "#111", borderTop: "1px solid #333", display: "flex", flexDirection: "column" }}>
+                    <div style={{ padding: "8px 16px", background: "#222", fontSize: "12px", color: "#888", fontWeight: "bold", borderBottom: "1px solid #333", display: "flex", justifyContent: "space-between" }}>
+                      <span>Console Output</span>
+                      <button onClick={() => setConsoleOutput([])} style={{ color: "#888", background: "none", border: "none", cursor: "pointer", fontSize: "11px" }}>Clear</button>
+                    </div>
+                    <div style={{ flex: 1, overflowY: "auto", padding: "12px 16px", fontFamily: "monospace", fontSize: "13px", color: "#fff" }}>
+                      {consoleOutput.length === 0 ? <span style={{ color: "#555" }}>Ready to execute...</span> : consoleOutput.map((log, i) => <div key={i} style={{ marginBottom: "6px", borderBottom: "1px dashed #333", paddingBottom: "4px" }}>{log}</div>)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </section>
