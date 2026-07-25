@@ -64,6 +64,10 @@ export default function Home() {
 
   /* ── UI chrome ── */
   const [welcome, setWelcome] = useState(WELCOME[0]);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [selectedVoice, setSelectedVoice] = useState<string | null>(null);
+  const [voiceMenuOpen, setVoiceMenuOpen] = useState(false);
+  const [ultraMode, setUltraMode] = useState(false);
   const [message, setMessage] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -82,7 +86,7 @@ export default function Home() {
   const [showModelsInChat, setShowModelsInChat] = useState(true);
   const [hovered, setHovered] = useState<string | null>(null);
 
-  /* ── persistence ── */
+  /* ── persistence & voice init ── */
   useEffect(() => {
     try {
       const saved = localStorage.getItem("constella_convos");
@@ -91,14 +95,21 @@ export default function Home() {
       if (act) setActiveId(act);
       const u = localStorage.getItem("constella_usage");
       if (u) setUsage(Number(u));
+      const v = localStorage.getItem("constella_voice");
+      if (v) setSelectedVoice(v);
     } catch(e) {}
+
+    const loadVoices = () => setVoices(window.speechSynthesis.getVoices());
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
   }, []);
 
   useEffect(() => {
     if (convos.length > 0) localStorage.setItem("constella_convos", JSON.stringify(convos));
     if (activeId) localStorage.setItem("constella_activeId", activeId);
     localStorage.setItem("constella_usage", usage.toString());
-  }, [convos, activeId, usage]);
+    if (selectedVoice) localStorage.setItem("constella_voice", selectedVoice);
+  }, [convos, activeId, usage, selectedVoice]);
 
   /* ── API connections ── */
   const [connections, setConnections] = useState<Record<string, boolean>>({});
@@ -181,7 +192,11 @@ export default function Home() {
 
     try {
       const provider = getBestModel();
-      const systemPrompt = "You are Constella, an advanced AI workspace. Answer concisely and professionally.";
+      let systemPrompt = "You are Constella, an advanced AI workspace. Answer concisely and professionally. If the user asks for an image, output exactly: ![image](https://image.pollinations.ai/prompt/URL_ENCODED_PROMPT) and nothing else.";
+      if (ultraMode) {
+        systemPrompt += " [ULTRA MODE ACTIVE: Provide extremely detailed, comprehensive, and genius-level answers with maximum depth.]";
+      }
+      
       const messagesPayload = [
         { role: "system", content: systemPrompt },
         ...(convoToSend?.msgs || []).map(m => ({ role: m.role, content: m.content }))
@@ -198,6 +213,12 @@ export default function Home() {
       let replyContent = "";
       if (res.ok) {
         replyContent = data.content;
+        if (selectedVoice) {
+          const u = new SpeechSynthesisUtterance(replyContent);
+          const v = voices.find(vo => vo.name === selectedVoice);
+          if (v) u.voice = v;
+          window.speechSynthesis.speak(u);
+        }
       } else {
         replyContent = `Error from ${provider}: ${data.error || "Unknown error"}`;
       }
@@ -336,6 +357,12 @@ export default function Home() {
           <button onClick={() => setSideOpen(o => !o)}><Menu size={17} /></button>
           <div><strong>{active ? active.title : "New chat"}</strong><span>Constella team active</span></div>
           <div className="topbar-right">
+            <button onClick={() => setVoiceMenuOpen(true)} style={{ display: "flex", alignItems: "center", gap: "6px", color: selectedVoice ? "#ab68ff" : "#888", fontWeight: selectedVoice ? 600 : 400, background: selectedVoice ? "rgba(171, 104, 255, 0.1)" : "transparent", padding: "4px 10px", borderRadius: "12px" }}>
+              <Volume2 size={15} />{selectedVoice ? "Voice On" : "Voice"}
+            </button>
+            <button onClick={() => setUltraMode(!ultraMode)} style={{ display: "flex", alignItems: "center", gap: "6px", color: ultraMode ? "#F03A2E" : "#888", fontWeight: ultraMode ? 600 : 400, background: ultraMode ? "rgba(240, 58, 46, 0.1)" : "transparent", padding: "4px 10px", borderRadius: "12px" }}>
+              <Zap size={15} />{ultraMode ? "ULTRA" : "Ultra Mode"}
+            </button>
             <span className="usage-badge">{usage} pts</span>
             <span className="team-online"><i />4 models coordinated</span>
             <button onClick={() => openSettings("Keyboard shortcuts")}><Command size={17} /></button>
@@ -405,7 +432,11 @@ export default function Home() {
                     <div key={i} className={`msg ${m.role}`}>
                       {m.role === "assistant" && <div className="msg-avatar"><Sparkles size={14} /></div>}
                       <div className="msg-bubble">
-                        {m.content.split("\n").map((line, j) => <p key={j}>{line || "\u00A0"}</p>)}
+                        {m.content.split("\n").map((line, j) => {
+                          const isImg = line.match(/^!\[(.*?)\]\((.*?)\)$/);
+                          if (isImg) return <img key={j} src={isImg[2]} alt={isImg[1]} style={{maxWidth: "100%", borderRadius: "8px", marginTop: "8px"}} />;
+                          return <p key={j}>{line || "\u00A0"}</p>;
+                        })}
                       </div>
                     </div>
                   ))}
@@ -533,6 +564,45 @@ export default function Home() {
               <div><span>Chat history</span><button className={section === "Archived chats" ? "active" : ""} onClick={() => setSection("Archived chats")}><Archive size={16} />Archived chats</button></div>
             </aside>
             <div className="settings-content">{renderSettings(section, weights, setWeights, usage, usagePct, timeLeft, connections)}</div>
+          </section>
+        </div>
+      )}
+
+      {/* ── VOICE MENU ── */}
+      {voiceMenuOpen && (
+        <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setVoiceMenuOpen(false); }}>
+          <section className="settings-modal" style={{ maxWidth: "400px", height: "auto", display: "flex", flexDirection: "column", padding: "20px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <strong style={{ fontSize: "16px", color: "#fff" }}>Select Voice</strong>
+              <button onClick={() => setVoiceMenuOpen(false)} style={{ color: "#888" }}><X size={17} /></button>
+            </div>
+            {voices.length === 0 ? <p style={{ color: "#888", fontSize: "13px" }}>Loading voices...</p> : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "60vh", overflowY: "auto" }}>
+                <button 
+                  onClick={() => setSelectedVoice(null)} 
+                  style={{ textAlign: "left", padding: "12px", background: selectedVoice === null ? "rgba(171,104,255,0.1)" : "#222", color: selectedVoice === null ? "#ab68ff" : "#fff", borderRadius: "8px", border: `1px solid ${selectedVoice === null ? "#ab68ff" : "#333"}` }}
+                >
+                  <strong>No Voice</strong><br/><span style={{ fontSize: "12px", opacity: 0.7 }}>Mute AI responses</span>
+                </button>
+                {voices.filter(v => v.lang.startsWith("en")).slice(0, 15).map(v => (
+                  <button 
+                    key={v.name}
+                    onClick={() => {
+                      const u = new SpeechSynthesisUtterance(`Hi, I am ${v.name}.`);
+                      u.voice = v;
+                      window.speechSynthesis.speak(u);
+                    }}
+                    onDoubleClick={() => {
+                      setSelectedVoice(v.name);
+                      setVoiceMenuOpen(false);
+                    }}
+                    style={{ textAlign: "left", padding: "12px", background: selectedVoice === v.name ? "rgba(171,104,255,0.1)" : "#222", color: selectedVoice === v.name ? "#ab68ff" : "#fff", borderRadius: "8px", border: `1px solid ${selectedVoice === v.name ? "#ab68ff" : "#333"}` }}
+                  >
+                    <strong>{v.name}</strong><br/><span style={{ fontSize: "12px", opacity: 0.7 }}>{v.lang} • Single click to preview, Double click to select</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </section>
         </div>
       )}
