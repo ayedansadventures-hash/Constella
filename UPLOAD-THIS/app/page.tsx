@@ -79,7 +79,7 @@ export default function Home() {
   const [searchQ, setSearchQ] = useState("");
   const [view, setView] = useState<SideView>("chat");
   const [sideOpen, setSideOpen] = useState(true);
-  const [showModelsInChat, setShowModelsInChat] = useState(false);
+  const [showModelsInChat, setShowModelsInChat] = useState(true);
   const [hovered, setHovered] = useState<string | null>(null);
 
   /* ── API connections ── */
