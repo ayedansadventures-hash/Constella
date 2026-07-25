@@ -29,10 +29,10 @@ const CHIPS = [
 ];
 
 const MODELS = [
-  { id: "deepseek", name: "DeepSeek", summary: "Reasoning lead", best: "Logic", color: "#4d6bfe", icon: "D" },
-  { id: "kimi", name: "Kimi", summary: "Context lead", best: "Reading", color: "#F03A2E", icon: "K" },
-  { id: "gemini", name: "Gemini", summary: "Multimodal lead", best: "Vision", color: "#ab68ff", icon: "G" },
-  { id: "claude", name: "Claude", summary: "Synthesis lead", best: "Writing", color: "#d97757", icon: "A" }
+  { id: "deepseek", name: "DeepSeek", summary: "Reasoning lead", best: "Logic", color: "#4d6bfe", icon: "D", tasks: ["Complex logic", "Code refactoring", "Math", "Algorithms"] },
+  { id: "kimi", name: "Kimi", summary: "Context lead", best: "Reading", color: "#F03A2E", icon: "K", tasks: ["Long documents", "Summarization", "Data extraction", "Research"] },
+  { id: "gemini", name: "Gemini", summary: "Multimodal lead", best: "Vision", color: "#ab68ff", icon: "G", tasks: ["Creative writing", "Image analysis", "Brainstorming", "Quick drafts"] },
+  { id: "claude", name: "Claude", summary: "Synthesis lead", best: "Writing", color: "#d97757", icon: "A", tasks: ["Nuanced writing", "Editing", "Roleplay", "Tone matching"] }
 ];
 
 const SETTINGS_GROUPS = [
@@ -81,6 +81,24 @@ export default function Home() {
   const [sideOpen, setSideOpen] = useState(true);
   const [showModelsInChat, setShowModelsInChat] = useState(true);
   const [hovered, setHovered] = useState<string | null>(null);
+
+  /* ── persistence ── */
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("constella_convos");
+      if (saved) setConvos(JSON.parse(saved));
+      const act = localStorage.getItem("constella_activeId");
+      if (act) setActiveId(act);
+      const u = localStorage.getItem("constella_usage");
+      if (u) setUsage(Number(u));
+    } catch(e) {}
+  }, []);
+
+  useEffect(() => {
+    if (convos.length > 0) localStorage.setItem("constella_convos", JSON.stringify(convos));
+    if (activeId) localStorage.setItem("constella_activeId", activeId);
+    localStorage.setItem("constella_usage", usage.toString());
+  }, [convos, activeId, usage]);
 
   /* ── API connections ── */
   const [connections, setConnections] = useState<Record<string, boolean>>({});
@@ -342,65 +360,67 @@ export default function Home() {
         {/* ── CHAT STAGE ── */}
         {view === "chat" && (
           <div className="chat-stage">
-            {/* empty / welcome */}
-            {(!active || showModelsInChat) && (
-              <>
-                <div className="welcome">
-                  <div className="welcome-mark"><img src="/logo.png" alt="Constella Logo" style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "12px" }} /></div>
-                  <h1>{welcome}</h1>
-                  <p>Constella quietly assembles the right team for the work.</p>
-                </div>
-
-                <div className="chip-row">
-                  {CHIPS.map(c => (
-                    <button key={c.label} className="chip" onClick={() => { setMessage(c.label); }}>
-                      <span className="chip-emoji">{c.emoji}</span>{c.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="team-strip" aria-label="Constella model team">
-                  <div className="team-label"><Sparkles size={14} /><span><strong>Constella team</strong><small>Working as one intelligence</small></span></div>
-                  {MODELS.map(m => (
-                    <button key={m.id} onClick={() => { setActiveModel(m); setRoleStage("task"); }}>
-                      <i style={{ background: m.color, color: m.id === "codex" ? "#171717" : "#fff" }}>{m.icon}</i>
-                      <span><strong>{m.name}</strong><small>{m.best}</small></span><b>{weights[m.id]}%</b>
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-
-            {/* messages */}
-            {active && (
-              <div className="messages-scroll">
-                <div style={{ textAlign: "center", margin: "20px 0" }}>
-                  <button 
-                    onClick={() => setShowModelsInChat(!showModelsInChat)}
-                    style={{ background: "#333", color: "white", border: "none", padding: "6px 12px", borderRadius: "12px", cursor: "pointer", fontSize: "12px" }}
-                  >
-                    {showModelsInChat ? "Hide Models" : "Show Models & Weights"}
-                  </button>
-                </div>
-                {active.msgs.filter(m => m.role !== "system").map((m, i) => (
-                  <div key={i} className={`msg ${m.role}`}>
-                    {m.role === "assistant" && <div className="msg-avatar"><Sparkles size={14} /></div>}
-                    <div className="msg-bubble">
-                      {m.content.split("\n").map((line, j) => <p key={j}>{line || "\u00A0"}</p>)}
-                    </div>
+            <div className="messages-scroll">
+              {/* empty / welcome */}
+              {(!active || showModelsInChat) && (
+                <div style={{ paddingBottom: "40px" }}>
+                  <div className="welcome">
+                    <div className="welcome-mark"><img src="/logo.png" alt="Constella Logo" style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "12px", mixBlendMode: "screen", filter: "invert(1)" }} /></div>
+                    <h1>{welcome}</h1>
+                    <p>Constella quietly assembles the right team for the work.</p>
                   </div>
-                ))}
-                {typing && (
-                  <div className="msg assistant">
-                    <div className="msg-avatar"><Sparkles size={14} /></div>
-                    <div className="msg-bubble typing-indicator">
-                      <span /><span /><span />
-                    </div>
+
+                  <div className="chip-row">
+                    {CHIPS.map(c => (
+                      <button key={c.label} className="chip" onClick={() => { setMessage(c.label); }}>
+                        <span className="chip-emoji">{c.emoji}</span>{c.label}
+                      </button>
+                    ))}
                   </div>
-                )}
-                <div ref={endRef} />
-              </div>
-            )}
+
+                  <div className="team-strip" aria-label="Constella model team">
+                    <div className="team-label"><Sparkles size={14} /><span><strong>Constella team</strong><small>Working as one intelligence</small></span></div>
+                    {MODELS.map(m => (
+                      <button key={m.id} onClick={() => { setActiveModel(m); setRoleStage("task"); }}>
+                        <i style={{ background: m.color, color: m.id === "codex" ? "#171717" : "#fff" }}>{m.icon}</i>
+                        <span><strong>{m.name}</strong><small>{m.best}</small></span><b>{weights[m.id]}%</b>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* messages */}
+              {active && (
+                <>
+                  <div style={{ textAlign: "center", margin: "20px 0" }}>
+                    <button 
+                      onClick={() => setShowModelsInChat(!showModelsInChat)}
+                      style={{ background: "#333", color: "white", border: "none", padding: "6px 12px", borderRadius: "12px", cursor: "pointer", fontSize: "12px" }}
+                    >
+                      {showModelsInChat ? "Hide Models" : "Show Models & Weights"}
+                    </button>
+                  </div>
+                  {active.msgs.filter(m => m.role !== "system").map((m, i) => (
+                    <div key={i} className={`msg ${m.role}`}>
+                      {m.role === "assistant" && <div className="msg-avatar"><Sparkles size={14} /></div>}
+                      <div className="msg-bubble">
+                        {m.content.split("\n").map((line, j) => <p key={j}>{line || "\u00A0"}</p>)}
+                      </div>
+                    </div>
+                  ))}
+                  {typing && (
+                    <div className="msg assistant">
+                      <div className="msg-avatar"><Sparkles size={14} /></div>
+                      <div className="msg-bubble typing-indicator">
+                        <span /><span /><span />
+                      </div>
+                    </div>
+                  )}
+                  <div ref={endRef} />
+                </>
+              )}
+            </div>
 
             {/* composer */}
             <div className="composer-zone">

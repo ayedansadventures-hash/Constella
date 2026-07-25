@@ -491,14 +491,9 @@ button {
 }
 .intro-wave {
   position: absolute; inset: 0;
-  background: repeating-linear-gradient(
-    45deg,
-    rgba(128, 0, 0, 0.4),
-    rgba(128, 0, 0, 0.4) 40px,
-    transparent 40px,
-    transparent 80px
-  );
-  animation: wavePulse 4s linear infinite;
+  background: linear-gradient(120deg, #1a1a2e, #16213e, #0f3460, #e94560);
+  background-size: 400% 400%;
+  animation: wavePulse 8s ease infinite;
   opacity: 0; transition: opacity 1s ease;
 }
 .intro-wave.visible { opacity: 1; }
@@ -519,6 +514,9 @@ button {
 .intro-logo {
   width: 100px; height: 100px; margin-bottom: 24px; opacity: 0; transform: scale(0.5) translateY(40px);
   transition: all 1s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.intro-logo img {
+  width: 100%; height: 100%; object-fit: contain; mix-blend-mode: screen; filter: invert(1);
 }
 .intro-logo.visible { opacity: 1; transform: scale(1) translateY(0); }
 .intro-container.zoom-finish .intro-logo {
@@ -546,6 +544,7 @@ button {
 .intro-container.zoom-finish { opacity: 0; transition: opacity 0.5s ease-in 1s; pointer-events: none; }
 
 @keyframes wavePulse {
-  0% { transform: scale(1) translateY(0); filter: hue-rotate(0deg); }
-  100% { transform: scale(1.1) translateY(-20px); filter: hue-rotate(15deg); }
+  0% { background-position: 0% 50%; filter: hue-rotate(0deg); }
+  50% { background-position: 100% 50%; filter: hue-rotate(15deg); }
+  100% { background-position: 0% 50%; filter: hue-rotate(0deg); }
 }
