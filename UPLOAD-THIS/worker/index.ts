@@ -7,7 +7,7 @@ interface Env {
   DB: any;
   IMAGES: any;
   // API Keys from Cloudflare Secrets
-  OPENAI_API_KEY?: string;
+  KIMI_API_KEY?: string;
   DEEPSEEK_API_KEY?: string;
   ANTHROPIC_API_KEY?: string;
   GEMINI_API_KEY?: string;
@@ -23,12 +23,12 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   try {
     const { model, messages } = await request.json() as any;
     
-    if (model === "openai" || model === "codex") {
-      if (!env.OPENAI_API_KEY) return new Response(JSON.stringify({ error: "Missing OPENAI_API_KEY in Cloudflare Settings" }), { status: 400 });
-      const apiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+    if (model === "kimi") {
+      if (!env.KIMI_API_KEY) return new Response(JSON.stringify({ error: "Missing KIMI_API_KEY in Cloudflare Settings" }), { status: 400 });
+      const apiRes = await fetch("https://api.moonshot.cn/v1/chat/completions", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${env.OPENAI_API_KEY}` },
-        body: JSON.stringify({ model: "gpt-3.5-turbo", messages }) // Fallback to 3.5 turbo if codex is deprecated
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${env.KIMI_API_KEY}` },
+        body: JSON.stringify({ model: "moonshot-v1-32k", messages })
       });
       const data: any = await apiRes.json();
       return new Response(JSON.stringify({ content: data.choices?.[0]?.message?.content || data.error?.message || "Error" }), { headers: { "Content-Type": "application/json" } });
@@ -53,7 +53,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
       const apiRes = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
-        body: JSON.stringify({ model: "claude-3-haiku-20240307", max_tokens: 1024, system: sysMsg, messages: otherMsgs })
+        body: JSON.stringify({ model: "claude-fabel", max_tokens: 1024, system: sysMsg, messages: otherMsgs })
       });
       const data: any = await apiRes.json();
       return new Response(JSON.stringify({ content: data.content?.[0]?.text || data.error?.message || "Error" }), { headers: { "Content-Type": "application/json" } });
@@ -67,7 +67,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
         parts: [{ text: m.content }]
       }));
       
-      const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${env.GEMINI_API_KEY}`, {
+      const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${env.GEMINI_API_KEY}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -95,7 +95,7 @@ const worker = {
     }
     if (request.method === "GET" && url.pathname === "/api/chat/status") {
       const connections = {
-        openai: !!env.OPENAI_API_KEY,
+        kimi: !!env.KIMI_API_KEY,
         deepseek: !!env.DEEPSEEK_API_KEY,
         claude: !!env.ANTHROPIC_API_KEY,
         gemini: !!env.GEMINI_API_KEY
