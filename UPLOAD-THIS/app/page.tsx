@@ -8,7 +8,7 @@ import {
   HardDrive, Image as ImageIcon, Keyboard, Laptop, LogIn, LogOut, Menu,
   MessageSquarePlus, Mic, Monitor, Moon, Palette, Paperclip, Plug, Plus,
   Search, Settings, Sparkles, Trash2, UserRound, Volume2, WandSparkles, X, Zap,
-  Link as LinkIcon
+  Link as LinkIcon, Pencil, RefreshCw, Download
 } from "lucide-react";
 
 /* ── types ─────────────────────────────────────────────── */
@@ -70,6 +70,7 @@ export default function Home() {
   const [ultraMode, setUltraMode] = useState(false);
   const [activeArtifact, setActiveArtifact] = useState<{code: string; language: string} | null>(null);
   const [consoleOutput, setConsoleOutput] = useState<string[]>([]);
+  const [isDictating, setIsDictating] = useState(false);
   const [message, setMessage] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -96,7 +97,7 @@ export default function Home() {
       const act = localStorage.getItem("constella_activeId");
       if (act) setActiveId(act);
       const u = localStorage.getItem("constella_usage");
-      if (u) setUsage(Number(u));
+      if (u && !isNaN(Number(u))) setUsage(Number(u));
       const v = localStorage.getItem("constella_voice");
       if (v) setSelectedVoice(v);
     } catch(e) {}
@@ -124,7 +125,11 @@ export default function Home() {
 
   /* ── effects ── */
   useEffect(() => setWelcome(WELCOME[Math.floor(Math.random() * WELCOME.length)]), []);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [active?.msgs.length, typing]);
+  useEffect(() => {
+    const scroll = () => endRef.current?.scrollIntoView({ behavior: "smooth" });
+    scroll();
+    setTimeout(scroll, 150);
+  }, [active?.msgs.length, typing]);
   useEffect(() => { if (searchOpen) searchRef.current?.focus(); }, [searchOpen]);
 
   // Fetch connection status
@@ -164,6 +169,81 @@ export default function Home() {
   }
 
   /* ── actions ── */
+  const handleEdit = (msgIndex: number, text: string) => {
+    setMessage(text);
+    if (!active) return;
+    const newMsgs = active.msgs.slice(0, msgIndex);
+    const newConvos = convos.map(c => c.id === active.id ? { ...c, msgs: newMsgs } : c);
+    setConvos(newConvos);
+  };
+
+  const handleRegenerate = (msgIndex: number) => {
+    if (!active) return;
+    const newMsgs = active.msgs.slice(0, msgIndex);
+    const prevUserMsg = newMsgs[newMsgs.length - 1];
+    if (prevUserMsg && prevUserMsg.role === "user") {
+      const newConvos = convos.map(c => c.id === active.id ? { ...c, msgs: newMsgs.slice(0, newMsgs.length - 1) } : c);
+      setConvos(newConvos);
+      setTimeout(() => send(prevUserMsg.content), 50);
+    }
+  };
+
+  const handleExportChat = () => {
+    if (!active || active.msgs.length === 0) return;
+    const content = `# ${active.title}\n\n` + active.msgs.map(m => `**${m.role === 'user' ? 'You' : 'Constella'}**:\n${m.content}\n`).join("\n---\n\n");
+    const blob = new Blob([content], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${active.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDictate = () => {
+    if (isDictating) return;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Speech Recognition API is not supported in this browser.");
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    
+    recognition.onstart = () => setIsDictating(true);
+    
+    let finalTranscript = "";
+    
+    recognition.onresult = (event: any) => {
+      let interimTranscript = "";
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript;
+        } else {
+          interimTranscript += event.results[i][0].transcript;
+        }
+      }
+      setMessage(finalTranscript + interimTranscript);
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error("Speech recognition error", event.error);
+      setIsDictating(false);
+    };
+
+    recognition.onend = () => {
+      setIsDictating(false);
+      if (finalTranscript.trim()) {
+        setTimeout(() => send(finalTranscript), 100);
+      }
+    };
+
+    recognition.start();
+  };
+
   const runCode = () => {
     if (!activeArtifact || activeArtifact.language.toLowerCase() !== "javascript") return;
     setConsoleOutput([]);
@@ -385,6 +465,7 @@ export default function Home() {
             <button onClick={() => setUltraMode(!ultraMode)} style={{ display: "flex", alignItems: "center", gap: "6px", color: ultraMode ? "#F03A2E" : "#888", fontWeight: ultraMode ? 600 : 400, background: ultraMode ? "rgba(240, 58, 46, 0.1)" : "transparent", padding: "4px 10px", borderRadius: "12px" }}>
               <Zap size={15} />{ultraMode ? "ULTRA" : "Ultra Mode"}
             </button>
+            <button onClick={handleExportChat} title="Download Chat" style={{ color: "#888", background: "none", border: "none" }}><Download size={17} /></button>
             <span className="usage-badge">{usage} pts</span>
             <span className="team-online"><i />4 models coordinated</span>
             <button onClick={() => openSettings("Keyboard shortcuts")}><Command size={17} /></button>
@@ -451,39 +532,62 @@ export default function Home() {
                         {showModelsInChat ? "Hide Models" : "Show Models & Weights"}
                       </button>
                     </div>
-                    {active.msgs.filter(m => m.role !== "system").map((m, i) => (
+                    {active.msgs.filter(m => m.role !== "system").map((m, i) => {
+                      const msgIndex = active.msgs.findIndex(x => x === m);
+                      return (
                       <div key={i} className={`msg ${m.role}`}>
                         {m.role === "assistant" && <div className="msg-avatar"><Sparkles size={14} /></div>}
-                        <div className="msg-bubble">
-                          {(() => {
-                            const parts = m.content.split(/(```[\s\S]*?```)/g);
-                            return parts.map((part, i) => {
-                              if (part.startsWith("```") && part.endsWith("```")) {
-                                const match = part.match(/```(\w*)\n([\s\S]*?)```/);
-                                if (match) {
-                                  const lang = match[1] || "text";
-                                  const code = match[2];
-                                  return (
-                                    <div key={i} style={{ margin: "12px 0", background: "#111", border: "1px solid #333", borderRadius: "8px", overflow: "hidden" }}>
-                                      <div style={{ display: "flex", justifyContent: "space-between", background: "#222", padding: "8px 12px", fontSize: "12px", color: "#888" }}>
-                                        <span>{lang}</span>
-                                        <button onClick={() => setActiveArtifact({ code, language: lang })} style={{ color: "#ab68ff", fontWeight: 600 }}>Open in Canvas <ChevronRight size={12} style={{verticalAlign:"middle", marginBottom:"2px"}}/></button>
+                        <div className="msg-content-wrapper" style={{ display: "flex", alignItems: "flex-end", gap: "8px", flexDirection: m.role === "user" ? "row-reverse" : "row", maxWidth: "100%" }}>
+                          <div className="msg-bubble" style={{ maxWidth: "calc(100% - 40px)" }}>
+                            {(() => {
+                              const parts = m.content.split(/(```[\s\S]*?```)/g);
+                              return parts.map((part, i) => {
+                                if (part.startsWith("```") && part.endsWith("```")) {
+                                  const match = part.match(/```(\w*)\n([\s\S]*?)```/);
+                                  if (match) {
+                                    const lang = match[1] || "text";
+                                    const code = match[2];
+                                    return (
+                                      <div key={i} style={{ margin: "12px 0", background: "#111", border: "1px solid #333", borderRadius: "8px", overflow: "hidden" }}>
+                                        <div style={{ display: "flex", justifyContent: "space-between", background: "#222", padding: "8px 12px", fontSize: "12px", color: "#888" }}>
+                                          <span>{lang}</span>
+                                          <button onClick={() => setActiveArtifact({ code, language: lang })} style={{ color: "#ab68ff", fontWeight: 600 }}>Open in Canvas <ChevronRight size={12} style={{verticalAlign:"middle", marginBottom:"2px"}}/></button>
+                                        </div>
+                                        <pre style={{ padding: "12px", margin: 0, fontSize: "13px", overflowX: "auto" }}><code>{code}</code></pre>
                                       </div>
-                                      <pre style={{ padding: "12px", margin: 0, fontSize: "13px", overflowX: "auto" }}><code>{code}</code></pre>
-                                    </div>
-                                  );
+                                    );
+                                  }
                                 }
-                              }
-                              return <div key={i}>{part.split("\n").map((line, j) => {
-                                const isImg = line.match(/^!\[(.*?)\]\((.*?)\)$/);
-                                if (isImg) return <img key={j} src={isImg[2]} alt={isImg[1]} style={{maxWidth: "100%", borderRadius: "8px", marginTop: "8px"}} />;
-                                return <p key={j}>{line || "\u00A0"}</p>;
-                              })}</div>;
-                            });
-                          })()}
+                                return <div key={i}>{part.split("\n").map((line, j) => {
+                                  const isImg = line.match(/^!\[(.*?)\]\((.*?)\)$/);
+                                  if (isImg) return <img key={j} src={isImg[2]} alt={isImg[1]} style={{maxWidth: "100%", borderRadius: "8px", marginTop: "8px"}} />;
+                                  
+                                  let fLine = line.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                                  fLine = fLine.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                                  fLine = fLine.replace(/\*(.*?)\*/g, '<em>$1</em>');
+                                  fLine = fLine.replace(/`(.*?)`/g, '<code style="background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 4px;">$1</code>');
+                                  
+                                  const isList = fLine.match(/^(\s*[-*]\s+)(.*)/);
+                                  if (isList) return <li key={j} style={{ marginLeft: "20px", marginBottom: "4px" }} dangerouslySetInnerHTML={{ __html: isList[2] }} />;
+                                  
+                                  const isHeader = fLine.match(/^(#{1,6})\s+(.*)/);
+                                  if (isHeader) {
+                                    const Tag = `h${isHeader[1].length}` as keyof JSX.IntrinsicElements;
+                                    return <Tag key={j} style={{ margin: "16px 0 8px 0", color: "#fff" }} dangerouslySetInnerHTML={{ __html: isHeader[2] }} />;
+                                  }
+                                  
+                                  return <p key={j} dangerouslySetInnerHTML={{ __html: fLine || "\u00A0" }} />;
+                                })}</div>;
+                              });
+                            })()}
+                          </div>
+                          <div className="msg-actions" style={{ opacity: 0.5, cursor: "pointer", display: "flex", gap: "8px", paddingBottom: "4px" }}>
+                            {m.role === "user" && <button onClick={() => handleEdit(msgIndex, m.content)} style={{ background: "none", border: "none", color: "#888" }} title="Edit message"><Pencil size={14} /></button>}
+                            {m.role === "assistant" && <button onClick={() => handleRegenerate(msgIndex)} style={{ background: "none", border: "none", color: "#888" }} title="Regenerate response"><RefreshCw size={14} /></button>}
+                          </div>
                         </div>
                       </div>
-                    ))}
+                    )})}
                     {typing && (
                       <div className="msg assistant">
                         <div className="msg-avatar"><Sparkles size={14} /></div>
@@ -508,6 +612,7 @@ export default function Home() {
                     placeholder={usage > 0 ? "Do anything" : "Waiting for usage refresh…"}
                     disabled={usage <= 0}
                     aria-label="Message Constella"
+                    style={{ fontStyle: isDictating ? 'italic' : 'normal', color: isDictating ? '#ab68ff' : 'inherit' }}
                   />
                   <div className="composer-actions">
                     <div className="attach-anchor">
@@ -520,11 +625,25 @@ export default function Home() {
                         </div>
                       )}
                     </div>
-                    <input hidden multiple type="file" ref={fileRef} />
+                    <input hidden multiple type="file" ref={fileRef} onChange={e => {
+                      const files = Array.from(e.target.files || []);
+                      files.forEach(file => {
+                        const reader = new FileReader();
+                        reader.onload = (evt) => {
+                          const content = evt.target?.result;
+                          if (content && typeof content === "string") {
+                            setMessage(prev => prev + `\n\n--- FILE: ${file.name} ---\n${content}\n--- END FILE ---\n\n`);
+                          }
+                        };
+                        reader.readAsText(file);
+                      });
+                      e.target.value = '';
+                      setAttachOpen(false);
+                    }} />
                     <button className={plan ? "plan-active" : ""} onClick={() => setPlan(!plan)}><FileCode2 size={16} />{plan ? "Plan on" : "Plan off"}</button>
                     <div className="composer-spacer" />
                     <div className="unity-pill"><Sparkles size={14} /><span>Constella Auto</span><ChevronDown size={14} /></div>
-                    <button aria-label="Dictate"><Mic size={18} /></button>
+                    <button aria-label="Dictate" onClick={handleDictate} style={{ color: isDictating ? '#f03a2e' : 'inherit' }}><Mic size={18} /></button>
                     <button className="send" disabled={!message.trim() || usage <= 0} onClick={() => send()}><ArrowUp size={18} /></button>
                   </div>
                 </div>
